@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>А вы знаете Ruby?</title>
+    <meta name="viewport" content="width=device-width">
+    <meta name="description" content="">
+    <link rel="canonical" href="http://nleo.github.io//blog/2014-07-12/know-ruby.html">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/blog/css/main.css">
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+
+  <div class="wrap">
+
+    <a class="site-title" href="/blog/">Leo's blog</a>
+
+    <nav class="site-nav">
+      <a href="#" class="menu-icon">
+        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+           viewBox="0 0 18 15" enable-background="new 0 0 18 15" xml:space="preserve">
+          <path fill="#505050" d="M18,1.484c0,0.82-0.665,1.484-1.484,1.484H1.484C0.665,2.969,0,2.304,0,1.484l0,0C0,0.665,0.665,0,1.484,0
+            h15.031C17.335,0,18,0.665,18,1.484L18,1.484z"/>
+          <path fill="#505050" d="M18,7.516C18,8.335,17.335,9,16.516,9H1.484C0.665,9,0,8.335,0,7.516l0,0c0-0.82,0.665-1.484,1.484-1.484
+            h15.031C17.335,6.031,18,6.696,18,7.516L18,7.516z"/>
+          <path fill="#505050" d="M18,13.516C18,14.335,17.335,15,16.516,15H1.484C0.665,15,0,14.335,0,13.516l0,0
+            c0-0.82,0.665-1.484,1.484-1.484h15.031C17.335,12.031,18,12.696,18,13.516L18,13.516z"/>
+        </svg>
+      </a>
+      <div class="trigger">
+        
+          
+        
+          
+        
+      </div>
+    </nav>
+
+  </div>
+
+</header>
+
+
+    <div class="page-content">
+      <div class="wrap">
+      <div class="post">
+
+  <header class="post-header">
+    <h1>А вы знаете Ruby?</h1>
+    <p class="meta">Jul 12, 2014</p>
+  </header>
+
+  <article class="post-content">
+  <p>Многие не знают о тех мощных параметрах командной строки, что понимает интерпретатор Ruby. Они показывают как сильное влияние оказал на язык Perl и что Ruby отличный интсрумент общего назначения для командной строки.</p>
+
+<p>Предположим есть задача обновить некоторые текстовые файлы, которые используются у нас в проекте. Данные выглядят как CSV, но так же содержат комментарии. Нам нужно отфильтровать некоторые записи по стране. Вот пример файла:</p>
+
+<figure class="highlight"><pre><code class="language-bash" data-lang="bash">% wc -l
+<span class="m">1005</span> data.csv
+% head data.csv
+<span class="c"># Copyright 2014 Acme corp. All rights reserved.</span>
+<span class="c">#</span>
+<span class="c"># Please do not reproduce this file without including this notice.</span>
+<span class="c"># ===============================================================</span>
+Name,Partner,Email,Title,Price,Country
+Nikolas Hamill,Emely Langosh Sr.,nash@moen.info,Awesome Wooden Computer,42261,Puerto Rico
+Friedrich Zboncak MD,Ms. Trycia Sporer,nils@treutelrodriguez.name,Sleek Wooden Hat,35701,Suriname
+Marcus Nicolas,Margot Hoppe,maeve@hilll.info,Rustic Steel Shoes,40258,Argentina
+Toni Ernser I,Guillermo Kihn II,clara.marvin@west.net,Sleek Cotton Pants,68332,Turks and Caicos Islands
+Mayra Kerluke DDS,Marvin Lynch,sydni.schuppe@schuster.com,Incredible Steel Gloves,47017,New Zealand</code></pre></figure>
+
+<p>Предположим мы не можем использовать модуль CSV из стандартной библиотеки Ruby и сделаем все ручками, например, вот так:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="o">!</span><span class="sr">/usr/</span><span class="n">bin</span><span class="o">/</span><span class="n">env</span> <span class="n">ruby</span> <span class="o">-</span><span class="n">w</span>
+<span class="c1"># Скрипт обрабатывает файлы, выглядящие как CSV</span>
+<span class="c1"># Удаляет комментарии и все записи не о Суринам</span>
+
+<span class="c1"># Определяем базовые переменные</span>
+<span class="n">input_record_separator</span>  <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+<span class="n">field_separator</span>         <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
+<span class="n">output_record_separator</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+<span class="n">output_field_separator</span>  <span class="o">=</span> <span class="s1">&#39;;&#39;</span>
+<span class="n">filename</span> <span class="o">=</span> <span class="no">ARGV</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span>
+
+<span class="no">File</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s1">&#39;r+&#39;</span><span class="p">)</span> <span class="k">do</span> <span class="o">|</span><span class="n">f</span><span class="o">|</span>
+
+  <span class="c1"># Считываем весь файл в массив</span>
+  <span class="n">input</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span><span class="p">(</span><span class="n">input_record_separator</span><span class="p">)</span>
+  <span class="n">output</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+
+  <span class="n">input</span><span class="o">.</span><span class="n">each_with_index</span> <span class="k">do</span> <span class="o">|</span><span class="n">last_read_line</span><span class="p">,</span> <span class="n">i</span><span class="o">|</span>
+
+    <span class="c1"># Удаляем символ перевода строки</span>
+    <span class="n">last_read_line</span><span class="o">.</span><span class="n">chomp!</span><span class="p">(</span><span class="n">input_record_separator</span><span class="p">)</span>
+
+    <span class="c1"># Разбиваем строку на поля</span>
+    <span class="n">fields</span> <span class="o">=</span> <span class="n">last_read_line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">field_separator</span><span class="p">)</span>
+
+    <span class="c1"># Обрабатываем не комментарии о Суринам</span>
+    <span class="k">if</span> <span class="n">fields</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">==</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="n">last_read_line</span> <span class="o">=~</span> <span class="sr">/^# /</span><span class="p">)</span>
+
+      <span class="c1"># Объединем строки и поля нашими разделителями</span>
+      <span class="n">fields</span><span class="o">.</span><span class="n">unshift</span> <span class="n">i</span>
+      <span class="n">output</span> <span class="o">&lt;&lt;</span> <span class="n">fields</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">output_field_separator</span><span class="p">)</span>
+      <span class="n">output</span> <span class="o">&lt;&lt;</span> <span class="n">output_record_separator</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+
+  <span class="c1"># Возвращаемся к началу файла и перезаписываем его содержимым output</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">rewind</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">write</span> <span class="n">output</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">flush</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">truncate</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span>
+<span class="k">end</span></code></pre></figure>
+
+<p>Это определенно не лучший код в моей жизни, но он делает свою работу.</p>
+
+<h2 id="section">Используем стандартные переменные</h2>
+
+<p>Для оптимизации скрипта мы можем перейти на стандартные глобальные переменные. Чтобы прояснить их назначение, мы подключим библиотеку english:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="c1">#!/usr/bin/env ruby -w</span>
+<span class="nb">require</span> <span class="s1">&#39;english&#39;</span>
+<span class="vg">$INPUT_RECORD_SEPARATOR</span>  <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+<span class="vg">$FIELD_SEPARATOR</span>         <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
+<span class="vg">$OUTPUT_RECORD_SEPARATOR</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+<span class="vg">$OUTPUT_FIELD_SEPARATOR</span>  <span class="o">=</span> <span class="s1">&#39;;&#39;</span>
+<span class="n">filename</span> <span class="o">=</span> <span class="no">ARGV</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span>
+
+<span class="no">File</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s1">&#39;r+&#39;</span><span class="p">)</span> <span class="k">do</span> <span class="o">|</span><span class="n">f</span><span class="o">|</span>
+  <span class="n">input</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span><span class="p">(</span><span class="n">input_record_separator</span><span class="p">)</span>
+  <span class="n">output</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+  <span class="n">input</span><span class="o">.</span><span class="n">each_with_index</span> <span class="k">do</span> <span class="o">|</span><span class="n">last_read_line</span><span class="p">,</span> <span class="n">i</span><span class="o">|</span>
+    <span class="vg">$LAST_READ_LINE</span> <span class="o">=</span> <span class="n">last_read_line</span>
+    <span class="vg">$INPUT_LINE_NUMBER</span> <span class="o">=</span> <span class="n">i</span>
+    <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">chomp!</span><span class="p">(</span><span class="vg">$INPUT_RECORD_SEPARATOR</span><span class="p">)</span>
+    <span class="vg">$F</span> <span class="o">=</span> <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="vg">$FIELD_SEPARATOR</span><span class="p">)</span>
+    <span class="k">if</span> <span class="vg">$F</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">==</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="vg">$LAST_READ_LINE</span> <span class="o">=~</span> <span class="sr">/^# /</span><span class="p">)</span>
+      <span class="vg">$F</span><span class="o">.</span><span class="n">unshift</span> <span class="vg">$INPUT_LINE_NUMBER</span>
+      <span class="n">output</span> <span class="o">&lt;&lt;</span> <span class="vg">$F</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="vg">$OUTPUT_FIELD_SEPARATOR</span><span class="p">)</span>
+      <span class="n">output</span> <span class="o">&lt;&lt;</span> <span class="vg">$OUTPUT_RECORD_SEPARATOR</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">rewind</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">write</span> <span class="n">output</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">flush</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">truncate</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span>
+<span class="k">end</span></code></pre></figure>
+
+<h2 id="section-1">Используем значения по-умолчанию</h2>
+
+<p>Поскольку эти переменные используются самим Ruby, они в большинстве случаев уже имеют осмысленные значения. Поэтому можно привести код к такому виду:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="c1">#!/usr/bin/env ruby -w</span>
+<span class="nb">require</span> <span class="s1">&#39;english&#39;</span>
+<span class="vg">$FIELD_SEPARATOR</span>         <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
+<span class="vg">$OUTPUT_RECORD_SEPARATOR</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+<span class="vg">$OUTPUT_FIELD_SEPARATOR</span>  <span class="o">=</span> <span class="s1">&#39;;&#39;</span>
+<span class="n">filename</span> <span class="o">=</span> <span class="no">ARGV</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span>
+
+<span class="no">File</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s1">&#39;r+&#39;</span><span class="p">)</span> <span class="k">do</span> <span class="o">|</span><span class="n">f</span><span class="o">|</span>
+  <span class="n">input</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span>
+  <span class="n">output</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+  <span class="n">input</span><span class="o">.</span><span class="n">each_with_index</span> <span class="k">do</span> <span class="o">|</span><span class="n">last_read_line</span><span class="p">,</span> <span class="n">i</span><span class="o">|</span>
+    <span class="vg">$LAST_READ_LINE</span> <span class="o">=</span> <span class="n">last_read_line</span>
+    <span class="vg">$INPUT_LINE_NUMBER</span> <span class="o">=</span> <span class="n">i</span>
+    <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">chomp!</span>
+    <span class="vg">$F</span> <span class="o">=</span> <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">split</span>
+    <span class="k">if</span> <span class="vg">$F</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">==</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="vg">$LAST_READ_LINE</span> <span class="o">=~</span> <span class="sr">/^# /</span><span class="p">)</span>
+      <span class="vg">$F</span><span class="o">.</span><span class="n">unshift</span> <span class="vg">$INPUT_LINE_NUMBER</span>
+      <span class="n">output</span> <span class="o">&lt;&lt;</span> <span class="vg">$F</span><span class="o">.</span><span class="n">join</span>
+      <span class="n">output</span> <span class="o">&lt;&lt;</span> <span class="vg">$OUTPUT_RECORD_SEPARATOR</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">rewind</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">write</span> <span class="n">output</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">flush</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">truncate</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span>
+<span class="k">end</span></code></pre></figure>
+
+<p>Мы смогли избавиться от некоторых аргументов и объявления $INPUT_RECORD_SEPARATOR. Также мы можем использовать IO#print, который объединяет несколько аргументов с помощью $OUTPUT_FIELD_SEPARATOR. Он также использует $OUTPUT_RECORD_SEPARATOR, если переменная инициализирована.</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="c1">#!/usr/bin/env ruby -w</span>
+<span class="nb">require</span> <span class="s1">&#39;english&#39;</span>
+<span class="vg">$FIELD_SEPARATOR</span>         <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
+<span class="vg">$OUTPUT_RECORD_SEPARATOR</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+<span class="vg">$OUTPUT_FIELD_SEPARATOR</span>  <span class="o">=</span> <span class="s1">&#39;;&#39;</span>
+<span class="n">filename</span> <span class="o">=</span> <span class="no">ARGV</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span>
+
+<span class="no">File</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s1">&#39;r+&#39;</span><span class="p">)</span> <span class="k">do</span> <span class="o">|</span><span class="n">f</span><span class="o">|</span>
+  <span class="n">input</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readlines</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">rewind</span>
+  <span class="n">input</span><span class="o">.</span><span class="n">each_with_index</span> <span class="k">do</span> <span class="o">|</span><span class="n">last_read_line</span><span class="p">,</span> <span class="n">i</span><span class="o">|</span>
+    <span class="vg">$LAST_READ_LINE</span> <span class="o">=</span> <span class="n">last_read_line</span>
+    <span class="vg">$INPUT_LINE_NUMBER</span> <span class="o">=</span> <span class="n">i</span>
+    <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">chomp!</span>
+    <span class="vg">$F</span> <span class="o">=</span> <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">split</span>
+    <span class="k">if</span> <span class="vg">$F</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">==</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="vg">$LAST_READ_LINE</span> <span class="o">=~</span> <span class="sr">/^# /</span><span class="p">)</span>
+      <span class="vg">$F</span><span class="o">.</span><span class="n">unshift</span> <span class="vg">$INPUT_LINE_NUMBER</span>
+      <span class="n">f</span><span class="o">.</span><span class="n">print</span> <span class="o">*</span><span class="vg">$F</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">flush</span>
+  <span class="n">f</span><span class="o">.</span><span class="n">truncate</span><span class="p">(</span><span class="n">f</span><span class="o">.</span><span class="n">pos</span><span class="p">)</span>
+<span class="k">end</span></code></pre></figure>
+
+<p>Так мы избавились от переменной output. Теперь вместо того, чтобы читать весь файл в массив, мы можем обрабатывать его построчно:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="c1">#!/usr/bin/env ruby -w</span>
+<span class="nb">require</span> <span class="s1">&#39;english&#39;</span>
+<span class="vg">$FIELD_SEPARATOR</span>         <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
+<span class="vg">$OUTPUT_RECORD_SEPARATOR</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+<span class="vg">$OUTPUT_FIELD_SEPARATOR</span>  <span class="o">=</span> <span class="s1">&#39;;&#39;</span>
+<span class="n">filename</span> <span class="o">=</span> <span class="no">ARGV</span><span class="o">[</span><span class="mi">0</span><span class="o">]</span>
+
+<span class="no">File</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">filename</span><span class="p">,</span> <span class="s1">&#39;r+&#39;</span><span class="p">)</span> <span class="k">do</span> <span class="o">|</span><span class="n">f</span><span class="o">|</span>
+  <span class="k">while</span> <span class="n">f</span><span class="o">.</span><span class="n">gets</span>
+    <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">chomp!</span>
+    <span class="vg">$F</span> <span class="o">=</span> <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">split</span>
+    <span class="k">if</span> <span class="vg">$F</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">==</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="vg">$LAST_READ_LINE</span> <span class="o">=~</span> <span class="sr">/^# /</span><span class="p">)</span>
+      <span class="vg">$F</span><span class="o">.</span><span class="n">unshift</span> <span class="vg">$INPUT_LINE_NUMBER</span>
+      <span class="n">f</span><span class="o">.</span><span class="n">print</span> <span class="o">*</span><span class="vg">$F</span>
+    <span class="k">end</span>
+  <span class="k">end</span>
+<span class="k">end</span></code></pre></figure>
+
+<p>Сейчас мы используем IO#gets чтобы читать файл и автоматически присваивать значения переменным $LAST_READ_LINE и $INPUT_LINE_NUMBER. Так же мы потеряли возможность перемотать и перезаписать весь файл.</p>
+
+<h2 id="in-place">Чтение и редактирование файла in-place</h2>
+
+<p>Используя флаги -n -i мы можем сказать Ruby читать файл используя IO#gets и с помощью IO#print писать обратно в файл. Для -i можно передать расширение, с которым будет создан backup-файл.</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="c1">#!/usr/bin/env ruby -w -n -i</span>
+<span class="nb">require</span> <span class="s1">&#39;english&#39;</span>
+<span class="k">BEGIN</span> <span class="p">{</span>
+  <span class="vg">$FIELD_SEPARATOR</span>         <span class="o">=</span> <span class="s1">&#39;,&#39;</span>
+  <span class="vg">$OUTPUT_RECORD_SEPARATOR</span> <span class="o">=</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span>
+  <span class="vg">$OUTPUT_FIELD_SEPARATOR</span>  <span class="o">=</span> <span class="s1">&#39;;&#39;</span>
+<span class="p">}</span>
+
+<span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">chomp!</span>
+<span class="vg">$F</span> <span class="o">=</span> <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">split</span>
+<span class="k">if</span> <span class="vg">$F</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">==</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="vg">$LAST_READ_LINE</span> <span class="o">=~</span> <span class="sr">/^# /</span><span class="p">)</span>
+  <span class="vg">$F</span><span class="o">.</span><span class="n">unshift</span> <span class="vg">$INPUT_LINE_NUMBER</span>
+  <span class="nb">print</span> <span class="o">*</span><span class="vg">$F</span>
+<span class="k">end</span></code></pre></figure>
+
+<p>-n оборачивает скрипт в цикл while gets … end. Блок BEGIN { … } вызывается на старте программы в не зависимости от расположения в коде. Вызов IO#print по умолчанию направлен в единственный открытый файл, а -i управляет записью обратно в оригинальный файл.</p>
+
+<p>На заметку: -p делает почти тоже самое, что -n, но добавляет pring $_ в конец цикла. Он читает а затем пишет каждую строку в файле, позволяя вам пропускать или модифицировать строки перед записью.</p>
+
+<h2 id="section-2">Установка переменных с помощью опций командной строки</h2>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="c1">#!/usr/bin/env ruby -w -n -i -F, -l</span>
+<span class="nb">require</span> <span class="s1">&#39;english&#39;</span>
+<span class="k">BEGIN</span> <span class="p">{</span>
+  <span class="vg">$OUTPUT_FIELD_SEPARATOR</span>  <span class="o">=</span> <span class="s1">&#39;;&#39;</span>
+<span class="p">}</span>
+
+<span class="vg">$F</span> <span class="o">=</span> <span class="vg">$LAST_READ_LINE</span><span class="o">.</span><span class="n">split</span>
+<span class="k">if</span> <span class="vg">$F</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">==</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="vg">$LAST_READ_LINE</span> <span class="o">=~</span> <span class="sr">/^# /</span><span class="p">)</span>
+  <span class="vg">$F</span><span class="o">.</span><span class="n">unshift</span> <span class="vg">$INPUT_LINE_NUMBER</span>
+  <span class="nb">print</span> <span class="o">*</span><span class="vg">$F</span>
+<span class="k">end</span></code></pre></figure>
+
+<p>-F устанавливает значение для $INPUT_FIELD_SEPARATOR. -l говорит Ruby присвоить значение $INPUT_RECORD_SEPARATOR переменной $OUTPUT_FIELD_SEPARATOR и удалить $INPUT_FIELD_SEPARATOR из $LAST_READ_LINE используя String#chomp!. Что означает: разделитель входящих записей будет удален из прочитанных строк (что нам и нужно) и добавлен к строкам на запись (опять же как раз то, чего мы хотим).</p>
+
+<p>Теперь используем авторазделение -a:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="c1">#!/usr/bin/env ruby -w -n -i -F, -l -a</span>
+<span class="nb">require</span> <span class="s1">&#39;english&#39;</span>
+<span class="k">BEGIN</span> <span class="p">{</span>
+  <span class="vg">$OUTPUT_FIELD_SEPARATOR</span>  <span class="o">=</span> <span class="s1">&#39;;&#39;</span>
+<span class="p">}</span>
+
+<span class="k">if</span> <span class="vg">$F</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">==</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">&amp;&amp;</span> <span class="o">!</span><span class="p">(</span><span class="vg">$LAST_READ_LINE</span> <span class="o">=~</span> <span class="sr">/^# /</span><span class="p">)</span>
+  <span class="vg">$F</span><span class="o">.</span><span class="n">unshift</span> <span class="vg">$INPUT_LINE_NUMBER</span>
+  <span class="nb">print</span> <span class="o">*</span><span class="vg">$F</span>
+<span class="k">end</span></code></pre></figure>
+
+<p>С -a Ruby автоматически разобьет текущую строку в массив $F на каждой итерации.</p>
+
+<h2 id="section-3">Сравнение с текущей строкой</h2>
+
+<p>В Ruby есть сокращение, которое мы можем использовать с опцией -n или -p. Условия, регулярные выражение по-умолчанию применяются к $LAST_READ_LINE, а численные диапазоны к $INPUT_LINE_NUMBER. Благодаря этому знанию, можно упростить условный оператор:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="c1">#!/usr/bin/env ruby -w -n -i -F, -l -a</span>
+<span class="nb">require</span> <span class="s1">&#39;english&#39;</span>
+<span class="k">BEGIN</span> <span class="p">{</span>
+  <span class="vg">$OUTPUT_FIELD_SEPARATOR</span>  <span class="o">=</span> <span class="s1">&#39;;&#39;</span>
+<span class="p">}</span>
+
+<span class="k">unless</span> <span class="vg">$F</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">!=</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">||</span> <span class="sr">/^# /</span>
+  <span class="vg">$F</span><span class="o">.</span><span class="n">unshift</span> <span class="vg">$INPUT_LINE_NUMBER</span>
+  <span class="nb">print</span> <span class="o">*</span><span class="vg">$F</span>
+<span class="k">end</span></code></pre></figure>
+
+<h2 id="section-4">Сокращаем код</h2>
+
+<p>Уберем библиотеку english, перейдем на сокращенные названия переменных и запишем условный оператор в одну строку.</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="c1">#!/usr/bin/env ruby -w -n -i -F, -l -a</span>
+<span class="k">BEGIN</span> <span class="p">{</span> <span class="vg">$,</span> <span class="o">=</span> <span class="s1">&#39;;&#39;</span> <span class="p">}</span>
+<span class="nb">print</span> <span class="vg">$.</span><span class="p">,</span> <span class="o">*</span><span class="vg">$F</span> <span class="k">unless</span> <span class="vg">$F</span><span class="o">[</span><span class="mi">5</span><span class="o">]</span> <span class="o">!=</span> <span class="s1">&#39;Suriname&#39;</span> <span class="o">||</span> <span class="sr">/^# /</span></code></pre></figure>
+
+<h2 id="section-5">Заключение</h2>
+
+<p>Да, мы построили недоимплементацию Awk на Ruby. Если вы знаете Awk, то можете использовать его. Если вы знаете Ruby лучше, то благодаря этим ключам он может стать для вас хорошим инструментом командной строки.</p>
+
+<p>Предыдущий скрипт, может быть написан прямо в консоли примерно так:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="n">ruby</span> <span class="o">-</span><span class="n">wlani</span> <span class="o">-</span><span class="n">F</span><span class="p">,</span> <span class="o">-</span><span class="n">e</span> <span class="s2">&quot;BEGIN { $, = &#39;;&#39; }&quot;</span> <span class="o">-</span><span class="n">e</span> <span class="s2">&quot;print $., *$F unless $F[5] != &#39;Suriname&#39; || /^# /&quot;</span></code></pre></figure>
+
+<p>Можно парсить YAML:</p>
+
+<figure class="highlight"><pre><code class="language-ruby" data-lang="ruby"><span class="n">ruby</span> <span class="o">-</span><span class="n">r</span> <span class="n">yaml</span> <span class="o">-</span><span class="n">e</span> <span class="s1">&#39;puts YAML.load(ARGF)[&quot;database&quot;]&#39;</span> <span class="n">config</span><span class="o">/</span><span class="n">database</span><span class="o">.</span><span class="n">yml</span></code></pre></figure>
+
+<p>Иногда, методы Awk или Sed являются наиболее уместным инструментом для вашей задачи. Но иногда требуется что-то большее или вам просто нет смысла смотреть как сделать какие-то общие операции, которые вы знаете как реализовать на Ruby, на каком-то другом языке. Всегда стоит использовать подходящий инструмент для задачи, и представленная гибкость Ruby может удивить как часто Ruby - это тот самый инструмент.</p>
+
+<h3 id="section-6">Ссылки</h3>
+
+<ul>
+  <li><a href="http://arjanvandergaag.nl/blog/using-ruby-command-line-options.html">http://arjanvandergaag.nl/blog/using-ruby-command-line-options.html</a></li>
+  <li><a href="https://speakerdeck.com/avdgaag/getting-started-with-ruby">https://speakerdeck.com/avdgaag/getting-started-with-ruby</a></li>
+  <li><a href="http://ruby-doc.org/stdlib-2.1.2/libdoc/optparse/rdoc/OptionParser.html">http://ruby-doc.org/stdlib-2.1.2/libdoc/optparse/rdoc/OptionParser.html</a></li>
+  <li><a href="http://ruby-doc.org/stdlib-2.0.0/libdoc/find/rdoc/Find.html">http://ruby-doc.org/stdlib-2.0.0/libdoc/find/rdoc/Find.html</a></li>
+</ul>
+
+  </article>
+
+</div>
+      </div>
+    </div>
+
+    <footer class="site-footer">
+
+  <div class="wrap">
+
+    <h2 class="footer-heading">Leo's blog</h2>
+
+    <div class="footer-col-1 column">
+      <ul>
+        <li>Leo's blog</li>
+        <li><a href="mailto:nlpub0@gmail.com">nlpub0@gmail.com</a></li>
+      </ul>
+    </div>
+
+    <div class="footer-col-2 column">
+      <ul>
+        <li>
+          <a href="https://github.com/nleo">
+            <span class="icon github">
+              <svg version="1.1" class="github-icon-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+                 viewBox="0 0 16 16" enable-background="new 0 0 16 16" xml:space="preserve">
+                <path fill-rule="evenodd" clip-rule="evenodd" fill="#C2C2C2" d="M7.999,0.431c-4.285,0-7.76,3.474-7.76,7.761
+                c0,3.428,2.223,6.337,5.307,7.363c0.388,0.071,0.53-0.168,0.53-0.374c0-0.184-0.007-0.672-0.01-1.32
+                c-2.159,0.469-2.614-1.04-2.614-1.04c-0.353-0.896-0.862-1.135-0.862-1.135c-0.705-0.481,0.053-0.472,0.053-0.472
+                c0.779,0.055,1.189,0.8,1.189,0.8c0.692,1.186,1.816,0.843,2.258,0.645c0.071-0.502,0.271-0.843,0.493-1.037
+                C4.86,11.425,3.049,10.76,3.049,7.786c0-0.847,0.302-1.54,0.799-2.082C3.768,5.507,3.501,4.718,3.924,3.65
+                c0,0,0.652-0.209,2.134,0.796C6.677,4.273,7.34,4.187,8,4.184c0.659,0.003,1.323,0.089,1.943,0.261
+                c1.482-1.004,2.132-0.796,2.132-0.796c0.423,1.068,0.157,1.857,0.077,2.054c0.497,0.542,0.798,1.235,0.798,2.082
+                c0,2.981-1.814,3.637-3.543,3.829c0.279,0.24,0.527,0.713,0.527,1.437c0,1.037-0.01,1.874-0.01,2.129
+                c0,0.208,0.14,0.449,0.534,0.373c3.081-1.028,5.302-3.935,5.302-7.362C15.76,3.906,12.285,0.431,7.999,0.431z"/>
+              </svg>
+            </span>
+            <span class="username">nleo</span>
+          </a>
+        </li>
+        <li>
+          <a href="https://twitter.com/">
+            <span class="icon twitter">
+              <svg version="1.1" class="twitter-icon-svg" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+                 viewBox="0 0 16 16" enable-background="new 0 0 16 16" xml:space="preserve">
+                <path fill="#C2C2C2" d="M15.969,3.058c-0.586,0.26-1.217,0.436-1.878,0.515c0.675-0.405,1.194-1.045,1.438-1.809
+                c-0.632,0.375-1.332,0.647-2.076,0.793c-0.596-0.636-1.446-1.033-2.387-1.033c-1.806,0-3.27,1.464-3.27,3.27
+                c0,0.256,0.029,0.506,0.085,0.745C5.163,5.404,2.753,4.102,1.14,2.124C0.859,2.607,0.698,3.168,0.698,3.767
+                c0,1.134,0.577,2.135,1.455,2.722C1.616,6.472,1.112,6.325,0.671,6.08c0,0.014,0,0.027,0,0.041c0,1.584,1.127,2.906,2.623,3.206
+                C3.02,9.402,2.731,9.442,2.433,9.442c-0.211,0-0.416-0.021-0.615-0.059c0.416,1.299,1.624,2.245,3.055,2.271
+                c-1.119,0.877-2.529,1.4-4.061,1.4c-0.264,0-0.524-0.015-0.78-0.046c1.447,0.928,3.166,1.469,5.013,1.469
+                c6.015,0,9.304-4.983,9.304-9.304c0-0.142-0.003-0.283-0.009-0.423C14.976,4.29,15.531,3.714,15.969,3.058z"/>
+              </svg>
+            </span>
+            <span class="username"></span>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <div class="footer-col-3 column">
+      <p class="text"></p>
+    </div>
+
+  </div>
+
+</footer>
+
+
+    </body>
+</html>

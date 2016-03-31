@@ -1,0 +1,534 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Leo&#39;s blog</title>
+    <description></description>
+    <link>http://nleo.github.io//blog/</link>
+    <atom:link href="http://nleo.github.io//blog/feed.xml" rel="self" type="application/rss+xml" />
+    <pubDate>Thu, 31 Mar 2016 20:56:07 +0300</pubDate>
+    <lastBuildDate>Thu, 31 Mar 2016 20:56:07 +0300</lastBuildDate>
+    <generator>Jekyll v3.1.2</generator>
+    
+      <item>
+        <title>Парсим web в linux shell</title>
+        <description>&lt;p&gt;Иногда нужно пачками собрать какие-то ссылки или сохранить картинки. Каждый раз начиная писать скрипт с нуля, появлялась мысль, что набор команд, которые можно объединять в цепочки, как в bash, был бы очень удобен. И наконец я решил сменить парадигму и освоить парсинг в shell.&lt;/p&gt;
+
+&lt;p&gt;Первое, что нужно знать, hxselect, которые советуют на stackoverflow не работает. Вместо того, чтобы молча парсить, он зачем-то валидирует документ и ругается на ошибки и ничего не отдает (в том числе после hxnormalize). Забыли о нем.&lt;/p&gt;
+
+&lt;p&gt;Для примера мы будем работать с сайтом на котором есть галереи изображений и нам надо сохранить себе несколько последних галерей. Я переписываю этот сайт с нуля и мне нужна была статистика по количеству вертикальных и горизонтальных фотографий, чтобы решить какое заполнения ипользовать - &lt;a href=&quot;http://tympanus.net/Development/GridLoadingEffects/index2.html&quot;&gt;колонками&lt;/a&gt; или &lt;a href=&quot;https://www.google.ru/search?q=nature&amp;amp;tbm=isch&quot;&gt;строками&lt;/a&gt;. Один вариант более выйгрышен для вертикальных изображений, второй для горизонтальных.&lt;/p&gt;
+
+&lt;p&gt;Вот так я могу получить id ста последних галерей:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;for i in {1..5}; do curl &quot;http://www.samara-night.ru/report/page.$i.html&quot; | selector &#39;#content2 h4 a&#39; href &amp;lt; index.html | grep -o &#39;[0-9]\+&#39;; done
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;А вот этим скриптом я могу сохранить изображения из каждой галереи в отдельную папочку (изначально он писался в одну строку, но в процессе я все-таки сохранил его в файл):&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;#!/bin/bash
+while read id
+do
+  mkdir -p &quot;$id&quot; &amp;amp;&amp;amp; cd &quot;$id&quot; &amp;amp;&amp;amp; echo &quot;http://www.samara-night.ru/altreport/report.$id.html&quot; | xargs -n1 curl -s | selector &#39;.photos a&#39; href | uri_join http://www.samara-night.ru | xargs -P 10 -n1 -I % sh -c &quot;curl -s --cookie &#39;PHPSESSID=...&#39; % | selector &#39;#mainLentaImg&#39; src | uri_join http://www.samara-night.ru | xargs wget&quot; &amp;amp;
+done
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;запускать его можно так:&lt;/p&gt;
+
+&lt;pre&gt;&lt;code&gt;./sctipt &amp;lt; ids
+&lt;/code&gt;&lt;/pre&gt;
+
+&lt;p&gt;Что тут происходит:&lt;/p&gt;
+
+&lt;ol&gt;
+  &lt;li&gt;Скрипту на вход подаются id галерей&lt;/li&gt;
+  &lt;li&gt;В текущем каталоге создается папка с id галереи в качестве имени&lt;/li&gt;
+  &lt;li&gt;Переходим в папку&lt;/li&gt;
+  &lt;li&gt;Генерируем на основе id url галереи&lt;/li&gt;
+  &lt;li&gt;curl’ом забираем страницу галереи&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;selector &#39;.photos a&#39; href&lt;/code&gt; из страницы галереи выбираем ссылки на изображения&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;uri_join http://www.samara-night.ru&lt;/code&gt; поскольку ссылки относительные, надо получить полные пути&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;xargs -P 10 -n1 -I % sh -c&lt;/code&gt; полученные ссылки обрабатываем в 10 потоков&lt;/li&gt;
+  &lt;li&gt;Сначала грузим страницу с картинкой, передав куку с сессией (картинки отдаются только зарегистрированным пользователям)&lt;/li&gt;
+  &lt;li&gt;&lt;code&gt;selector &#39;#mainLentaImg&#39; src&lt;/code&gt; из нее получаем ссылку на саму картинку&lt;/li&gt;
+  &lt;li&gt;Сохраняем картинку wget’ом&lt;/li&gt;
+&lt;/ol&gt;
+
+&lt;p&gt;Скормить скрипту сразу 100 id оказалось плохой идеей я уронил и сайт и свою машину. 25 за раз (25*10=250 потоков) заняло у меня около 4 ГиБ памяти в пике.&lt;/p&gt;
+
+&lt;p&gt;Что такое &lt;code&gt;selector&lt;/code&gt; и &lt;code&gt;uri_join&lt;/code&gt;. Это мои скрипты-утилитки на Ruby, обертки для гемов &lt;code&gt;nokogiri&lt;/code&gt; и &lt;code&gt;uri&lt;/code&gt;.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;nokogiri&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;puts&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;Nokogiri&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;::&lt;/span&gt;&lt;span class=&quot;no&quot;&gt;HTML&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;no&quot;&gt;STDIN&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;read&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;css&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;no&quot;&gt;ARGV&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;map&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;e&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;e&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;attr&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;no&quot;&gt;ARGV&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;1&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)}&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;uri&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;no&quot;&gt;STDIN&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;readlines&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;each&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+  &lt;span class=&quot;nb&quot;&gt;puts&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;URI&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;join&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;no&quot;&gt;ARGV&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;line&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Результатом я доволен, можно быстро что-то где-то спарсить, протестировать селектор, получать инфу по частям и сохранять ее во временные файлы.&lt;/p&gt;
+
+&lt;p&gt;PS на выборке в 2351 изображений 1592 (67.7%) оказались горизонтальными.&lt;/p&gt;
+</description>
+        <pubDate>Sat, 20 Dec 2014 03:00:00 +0300</pubDate>
+        <link>http://nleo.github.io//blog/2014-12-20/parsing-web-in-shell.html</link>
+        <guid isPermaLink="true">http://nleo.github.io//blog/2014-12-20/parsing-web-in-shell.html</guid>
+        
+        
+        <category>ruby</category>
+        
+      </item>
+    
+      <item>
+        <title>Concurrency не параллелизм</title>
+        <description>&lt;h2 id=&quot;section&quot;&gt;Теория&lt;/h2&gt;
+
+&lt;p&gt;Concurrency - это о том как справляться с многими вещами одновременно.&lt;/p&gt;
+
+&lt;p&gt;Параллелизм - о том как делать много вещей одновременно.&lt;/p&gt;
+
+&lt;p&gt;Не одно и то же, но связанно&lt;/p&gt;
+
+&lt;p&gt;Concurrency - это о структуре, параллелизм о исполнении.&lt;/p&gt;
+
+&lt;p&gt;Concurrency - это путь организации решения проблемы, который может (но не обязан) быть распараллелен.&lt;/p&gt;
+
+&lt;p&gt;Concurrency - способ разбить программу на мелкие куски, которые могут выполняться независимо.&lt;/p&gt;
+
+&lt;p&gt;Коммуникация - способ координировать независимое выполнение.&lt;/p&gt;
+
+&lt;p&gt;Модель Go (так же как и Erlang и другие) основана на CSP (C. A. R. Hoare: Communicating Sequential Processes (CACM 1978))&lt;/p&gt;
+
+&lt;h2 id=&quot;section-1&quot;&gt;Суслики&lt;/h2&gt;
+
+&lt;h3 id=&quot;section-2&quot;&gt;Задача&lt;/h3&gt;
+
+&lt;p&gt;Перенести кучу устаревших мануалов в мусоросжигатель.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophersimple1.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Один суслик будет заниматься этим очень долго.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophersimple3.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Добавление суслика не решает проблему, нужно больше тележек.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophersimple2.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Так будет быстрее, но появляются узкие места у кучи и мусоросжигателя. Также необходимо синхронизировать сусликов.&lt;/p&gt;
+
+&lt;p&gt;Уберем узкие места&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophersimple4.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Это будет работать в 2 раза быстрее.&lt;/p&gt;
+
+&lt;p&gt;Это concurrent composition двух сусликов.&lt;/p&gt;
+
+&lt;h3 id=&quot;section-3&quot;&gt;Согласованная композиция&lt;/h3&gt;
+
+&lt;p&gt;Этот дизайн не является автоматически параллельным.&lt;/p&gt;
+
+&lt;p&gt;Что если только один суслик перемещается в один момент времени?&lt;/p&gt;
+
+&lt;p&gt;Concurrency остается (она заложена в дизайн), просто не параллельна.&lt;/p&gt;
+
+&lt;p&gt;Тем не менее композиция попрежнему может быть распараллелена.&lt;/p&gt;
+
+&lt;p&gt;Более того согласованная композиция предлагает другие модели.&lt;/p&gt;
+
+&lt;h3 id=&quot;section-4&quot;&gt;Другой дизайн&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophercomplex0.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Три суслика в действии, но скорее всего с задержками. Каждый суслик - независимо выполняемая процедура плюс коммуникация(координация).&lt;/p&gt;
+
+&lt;h3 id=&quot;concurrency&quot;&gt;Более четкая concurrency&lt;/h3&gt;
+
+&lt;p&gt;Добавим еще одного суслика для возврата пустых тележек.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophercomplex1.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;p&gt;Четыре суслика в действии, каждый делает одно простое задание.&lt;/p&gt;
+
+&lt;p&gt;Если мы устроили все правильно (вряд ли, но не невозможно), это будет в 4 раза быстрее чем наш первый односуликовый дизайн.&lt;/p&gt;
+
+&lt;h3 id=&quot;section-5&quot;&gt;Подытог&lt;/h3&gt;
+
+&lt;p&gt;Мы улучшили производительность добавив concurrent процедуру к существующему дизайну.&lt;/p&gt;
+
+&lt;p&gt;Больше сусликов делают больше работы.&lt;/p&gt;
+
+&lt;p&gt;Это более глубокое понимание, чем простой параллелизм.&lt;/p&gt;
+
+&lt;h3 id=&quot;concurrent-procedures&quot;&gt;Concurrent procedures&lt;/h3&gt;
+
+&lt;p&gt;Четыре отдельных суслико-процедуры:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;Загрузить книги в тележку&lt;/li&gt;
+  &lt;li&gt;Доставить тележку к мусоросжигателю&lt;/li&gt;
+  &lt;li&gt;Выгрузить книги&lt;/li&gt;
+  &lt;li&gt;Вернуть пустую тележку&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Различные согласованные дизайны позволяют по-разному распараллеливать.&lt;/p&gt;
+
+&lt;h3 id=&quot;section-6&quot;&gt;Больше параллельности!&lt;/h3&gt;
+
+&lt;p&gt;Теперь мы можем распараллеливать в новом измерении, concurrent design позволяет делать это просто. Восемь сусликов, все при деле.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophercomplex2.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;section-7&quot;&gt;Или полное отсутствие параллельного исполнения&lt;/h3&gt;
+
+&lt;p&gt;Не забывайте, даже если только один суслик активен в один момент времени, это по-прежнему верное и concurrent решение&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophercomplex2.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;section-8&quot;&gt;Еще один дизайн&lt;/h3&gt;
+
+&lt;p&gt;Вот еще один способ структурировать проблему в виде согласованной композиции суслико-процедур.&lt;/p&gt;
+
+&lt;p&gt;Два суслика плюс временная куча.&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophercomplex3.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;section-9&quot;&gt;Параллелим как обычно&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophercomplex4.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;section-10&quot;&gt;Или немного другим способом&lt;/h3&gt;
+
+&lt;p&gt;&lt;img src=&quot;/blog/images/2014/gophercomplex5.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;section-11&quot;&gt;Полная оптимизация&lt;/h3&gt;
+
+&lt;p&gt;Используем все подходы. 16 сусликов за работой!
+&lt;img src=&quot;/blog/images/2014/gophercomplex6.jpg&quot; alt=&quot;Concurrency не параллелизм&quot; /&gt;&lt;/p&gt;
+
+&lt;h3 id=&quot;section-12&quot;&gt;Уроки&lt;/h3&gt;
+
+&lt;p&gt;Есть много способов расчленить обработку.&lt;/p&gt;
+
+&lt;p&gt;Это concurrent design.&lt;/p&gt;
+
+&lt;p&gt;После того того как мы расчленили задачу, распраралеливание происходит просто само собой.&lt;/p&gt;
+
+&lt;h3 id=&quot;section-13&quot;&gt;Вернёмся к компьютерам&lt;/h3&gt;
+
+&lt;p&gt;В нашей задаче на транспортировку книг заменим:&lt;/p&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;кучу книг - веб-контент&lt;/li&gt;
+  &lt;li&gt;суслик - CPU&lt;/li&gt;
+  &lt;li&gt;тележка - сортировка, рендеринг, работа с сетью&lt;/li&gt;
+  &lt;li&gt;мусоросжигатель - прокси, броузер, или другой потребитель&lt;/li&gt;
+&lt;/ul&gt;
+
+&lt;p&gt;Наша задача превращается в согласованный дизайн для масштабируемых веб-сервисов. Суслики обслуживают веб-контент.&lt;/p&gt;
+
+&lt;h3 id=&quot;section-14&quot;&gt;Ссылки&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;http://blog.golang.org/concurrency-is-not-parallelism&quot;&gt;Блогозапись&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://talks.golang.org/2012/waza.slide&quot;&gt;Слайды&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</description>
+        <pubDate>Wed, 10 Dec 2014 03:00:00 +0300</pubDate>
+        <link>http://nleo.github.io//blog/2014-12-10/concurrency-is-not-parallelism.html</link>
+        <guid isPermaLink="true">http://nleo.github.io//blog/2014-12-10/concurrency-is-not-parallelism.html</guid>
+        
+        
+        <category>ruby</category>
+        
+      </item>
+    
+      <item>
+        <title>А вы знаете Ruby?</title>
+        <description>&lt;p&gt;Многие не знают о тех мощных параметрах командной строки, что понимает интерпретатор Ruby. Они показывают как сильное влияние оказал на язык Perl и что Ruby отличный интсрумент общего назначения для командной строки.&lt;/p&gt;
+
+&lt;p&gt;Предположим есть задача обновить некоторые текстовые файлы, которые используются у нас в проекте. Данные выглядят как CSV, но так же содержат комментарии. Нам нужно отфильтровать некоторые записи по стране. Вот пример файла:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-bash&quot; data-lang=&quot;bash&quot;&gt;% wc -l
+&lt;span class=&quot;m&quot;&gt;1005&lt;/span&gt; data.csv
+% head data.csv
+&lt;span class=&quot;c&quot;&gt;# Copyright 2014 Acme corp. All rights reserved.&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;#&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;# Please do not reproduce this file without including this notice.&lt;/span&gt;
+&lt;span class=&quot;c&quot;&gt;# ===============================================================&lt;/span&gt;
+Name,Partner,Email,Title,Price,Country
+Nikolas Hamill,Emely Langosh Sr.,nash@moen.info,Awesome Wooden Computer,42261,Puerto Rico
+Friedrich Zboncak MD,Ms. Trycia Sporer,nils@treutelrodriguez.name,Sleek Wooden Hat,35701,Suriname
+Marcus Nicolas,Margot Hoppe,maeve@hilll.info,Rustic Steel Shoes,40258,Argentina
+Toni Ernser I,Guillermo Kihn II,clara.marvin@west.net,Sleek Cotton Pants,68332,Turks and Caicos Islands
+Mayra Kerluke DDS,Marvin Lynch,sydni.schuppe@schuster.com,Incredible Steel Gloves,47017,New Zealand&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Предположим мы не можем использовать модуль CSV из стандартной библиотеки Ruby и сделаем все ручками, например, вот так:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;sr&quot;&gt;/usr/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;bin&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;env&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;ruby&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;w&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;# Скрипт обрабатывает файлы, выглядящие как CSV&lt;/span&gt;
+&lt;span class=&quot;c1&quot;&gt;# Удаляет комментарии и все записи не о Суринам&lt;/span&gt;
+
+&lt;span class=&quot;c1&quot;&gt;# Определяем базовые переменные&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;input_record_separator&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;field_separator&lt;/span&gt;         &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;,&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;output_record_separator&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;output_field_separator&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;ARGV&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;no&quot;&gt;File&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;r+&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;# Считываем весь файл в массив&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;input&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;readlines&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;input_record_separator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;&amp;#39;&lt;/span&gt;
+
+  &lt;span class=&quot;n&quot;&gt;input&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;each_with_index&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;# Удаляем символ перевода строки&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;chomp!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;input_record_separator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;# Разбиваем строку на поля&lt;/span&gt;
+    &lt;span class=&quot;n&quot;&gt;fields&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;field_separator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+    &lt;span class=&quot;c1&quot;&gt;# Обрабатываем не комментарии о Суринам&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fields&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=~&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+
+      &lt;span class=&quot;c1&quot;&gt;# Объединем строки и поля нашими разделителями&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;fields&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;unshift&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;fields&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;join&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;output_field_separator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;output_record_separator&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+
+  &lt;span class=&quot;c1&quot;&gt;# Возвращаемся к началу файла и перезаписываем его содержимым output&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rewind&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;write&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flush&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;truncate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pos&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Это определенно не лучший код в моей жизни, но он делает свою работу.&lt;/p&gt;
+
+&lt;h2 id=&quot;section&quot;&gt;Используем стандартные переменные&lt;/h2&gt;
+
+&lt;p&gt;Для оптимизации скрипта мы можем перейти на стандартные глобальные переменные. Чтобы прояснить их назначение, мы подключим библиотеку english:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby -w&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;english&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$INPUT_RECORD_SEPARATOR&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$FIELD_SEPARATOR&lt;/span&gt;         &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;,&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$OUTPUT_RECORD_SEPARATOR&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$OUTPUT_FIELD_SEPARATOR&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;ARGV&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;no&quot;&gt;File&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;r+&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;input&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;readlines&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;input_record_separator&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;&amp;#39;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;input&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;each_with_index&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;chomp!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$INPUT_RECORD_SEPARATOR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$FIELD_SEPARATOR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=~&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+      &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;unshift&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;join&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$OUTPUT_FIELD_SEPARATOR&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$OUTPUT_RECORD_SEPARATOR&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rewind&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;write&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flush&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;truncate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pos&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;h2 id=&quot;section-1&quot;&gt;Используем значения по-умолчанию&lt;/h2&gt;
+
+&lt;p&gt;Поскольку эти переменные используются самим Ruby, они в большинстве случаев уже имеют осмысленные значения. Поэтому можно привести код к такому виду:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby -w&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;english&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$FIELD_SEPARATOR&lt;/span&gt;         &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;,&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$OUTPUT_RECORD_SEPARATOR&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$OUTPUT_FIELD_SEPARATOR&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;ARGV&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;no&quot;&gt;File&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;r+&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;input&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;readlines&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;&amp;#39;&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;input&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;each_with_index&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;chomp!&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=~&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+      &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;unshift&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;join&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;lt;&amp;lt;&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$OUTPUT_RECORD_SEPARATOR&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rewind&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;write&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;output&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flush&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;truncate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pos&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Мы смогли избавиться от некоторых аргументов и объявления $INPUT_RECORD_SEPARATOR. Также мы можем использовать IO#print, который объединяет несколько аргументов с помощью $OUTPUT_FIELD_SEPARATOR. Он также использует $OUTPUT_RECORD_SEPARATOR, если переменная инициализирована.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby -w&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;english&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$FIELD_SEPARATOR&lt;/span&gt;         &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;,&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$OUTPUT_RECORD_SEPARATOR&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$OUTPUT_FIELD_SEPARATOR&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;ARGV&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;no&quot;&gt;File&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;r+&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;input&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;readlines&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;rewind&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;input&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;each_with_index&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;last_read_line&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;i&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;chomp!&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=~&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+      &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;unshift&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;flush&lt;/span&gt;
+  &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;truncate&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;pos&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Так мы избавились от переменной output. Теперь вместо того, чтобы читать весь файл в массив, мы можем обрабатывать его построчно:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby -w&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;english&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$FIELD_SEPARATOR&lt;/span&gt;         &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;,&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$OUTPUT_RECORD_SEPARATOR&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$OUTPUT_FIELD_SEPARATOR&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;no&quot;&gt;ARGV&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;0&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt;
+
+&lt;span class=&quot;no&quot;&gt;File&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;open&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;filename&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;r+&amp;#39;&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;do&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;|&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;while&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;gets&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;chomp!&lt;/span&gt;
+    &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=~&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+      &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;unshift&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt;
+      &lt;span class=&quot;n&quot;&gt;f&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;print&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;
+    &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+  &lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Сейчас мы используем IO#gets чтобы читать файл и автоматически присваивать значения переменным $LAST_READ_LINE и $INPUT_LINE_NUMBER. Так же мы потеряли возможность перемотать и перезаписать весь файл.&lt;/p&gt;
+
+&lt;h2 id=&quot;in-place&quot;&gt;Чтение и редактирование файла in-place&lt;/h2&gt;
+
+&lt;p&gt;Используя флаги -n -i мы можем сказать Ruby читать файл используя IO#gets и с помощью IO#print писать обратно в файл. Для -i можно передать расширение, с которым будет создан backup-файл.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby -w -n -i&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;english&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;BEGIN&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$FIELD_SEPARATOR&lt;/span&gt;         &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;,&amp;#39;&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$OUTPUT_RECORD_SEPARATOR&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;&lt;span class=&quot;se&quot;&gt;\n&lt;/span&gt;&lt;span class=&quot;s2&quot;&gt;&amp;quot;&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$OUTPUT_FIELD_SEPARATOR&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;chomp!&lt;/span&gt;
+&lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=~&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;unshift&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt;
+  &lt;span class=&quot;nb&quot;&gt;print&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;-n оборачивает скрипт в цикл while gets … end. Блок BEGIN { … } вызывается на старте программы в не зависимости от расположения в коде. Вызов IO#print по умолчанию направлен в единственный открытый файл, а -i управляет записью обратно в оригинальный файл.&lt;/p&gt;
+
+&lt;p&gt;На заметку: -p делает почти тоже самое, что -n, но добавляет pring $_ в конец цикла. Он читает а затем пишет каждую строку в файле, позволяя вам пропускать или модифицировать строки перед записью.&lt;/p&gt;
+
+&lt;h2 id=&quot;section-2&quot;&gt;Установка переменных с помощью опций командной строки&lt;/h2&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby -w -n -i -F, -l&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;english&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;BEGIN&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$OUTPUT_FIELD_SEPARATOR&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;split&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=~&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;unshift&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt;
+  &lt;span class=&quot;nb&quot;&gt;print&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;-F устанавливает значение для $INPUT_FIELD_SEPARATOR. -l говорит Ruby присвоить значение $INPUT_RECORD_SEPARATOR переменной $OUTPUT_FIELD_SEPARATOR и удалить $INPUT_FIELD_SEPARATOR из $LAST_READ_LINE используя String#chomp!. Что означает: разделитель входящих записей будет удален из прочитанных строк (что нам и нужно) и добавлен к строкам на запись (опять же как раз то, чего мы хотим).&lt;/p&gt;
+
+&lt;p&gt;Теперь используем авторазделение -a:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby -w -n -i -F, -l -a&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;english&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;BEGIN&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$OUTPUT_FIELD_SEPARATOR&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;if&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;==&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;&amp;amp;&amp;amp;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;(&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$LAST_READ_LINE&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=~&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;)&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;unshift&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt;
+  &lt;span class=&quot;nb&quot;&gt;print&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;С -a Ruby автоматически разобьет текущую строку в массив $F на каждой итерации.&lt;/p&gt;
+
+&lt;h2 id=&quot;section-3&quot;&gt;Сравнение с текущей строкой&lt;/h2&gt;
+
+&lt;p&gt;В Ruby есть сокращение, которое мы можем использовать с опцией -n или -p. Условия, регулярные выражение по-умолчанию применяются к $LAST_READ_LINE, а численные диапазоны к $INPUT_LINE_NUMBER. Благодаря этому знанию, можно упростить условный оператор:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby -w -n -i -F, -l -a&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;require&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;english&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;BEGIN&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$OUTPUT_FIELD_SEPARATOR&lt;/span&gt;  &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt;
+&lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+
+&lt;span class=&quot;k&quot;&gt;unless&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;
+  &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;unshift&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$INPUT_LINE_NUMBER&lt;/span&gt;
+  &lt;span class=&quot;nb&quot;&gt;print&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;end&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;h2 id=&quot;section-4&quot;&gt;Сокращаем код&lt;/h2&gt;
+
+&lt;p&gt;Уберем библиотеку english, перейдем на сокращенные названия переменных и запишем условный оператор в одну строку.&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;c1&quot;&gt;#!/usr/bin/env ruby -w -n -i -F, -l -a&lt;/span&gt;
+&lt;span class=&quot;k&quot;&gt;BEGIN&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;{&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;;&amp;#39;&lt;/span&gt; &lt;span class=&quot;p&quot;&gt;}&lt;/span&gt;
+&lt;span class=&quot;nb&quot;&gt;print&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$.&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;*&lt;/span&gt;&lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt; &lt;span class=&quot;k&quot;&gt;unless&lt;/span&gt; &lt;span class=&quot;vg&quot;&gt;$F&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;[&lt;/span&gt;&lt;span class=&quot;mi&quot;&gt;5&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;]&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;!=&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;Suriname&amp;#39;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;||&lt;/span&gt; &lt;span class=&quot;sr&quot;&gt;/^# /&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;h2 id=&quot;section-5&quot;&gt;Заключение&lt;/h2&gt;
+
+&lt;p&gt;Да, мы построили недоимплементацию Awk на Ruby. Если вы знаете Awk, то можете использовать его. Если вы знаете Ruby лучше, то благодаря этим ключам он может стать для вас хорошим инструментом командной строки.&lt;/p&gt;
+
+&lt;p&gt;Предыдущий скрипт, может быть написан прямо в консоли примерно так:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;n&quot;&gt;ruby&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;wlani&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;F&lt;/span&gt;&lt;span class=&quot;p&quot;&gt;,&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;e&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;BEGIN { $, = &amp;#39;;&amp;#39; }&amp;quot;&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;e&lt;/span&gt; &lt;span class=&quot;s2&quot;&gt;&amp;quot;print $., *$F unless $F[5] != &amp;#39;Suriname&amp;#39; || /^# /&amp;quot;&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Можно парсить YAML:&lt;/p&gt;
+
+&lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-ruby&quot; data-lang=&quot;ruby&quot;&gt;&lt;span class=&quot;n&quot;&gt;ruby&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;r&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;yaml&lt;/span&gt; &lt;span class=&quot;o&quot;&gt;-&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;e&lt;/span&gt; &lt;span class=&quot;s1&quot;&gt;&amp;#39;puts YAML.load(ARGF)[&amp;quot;database&amp;quot;]&amp;#39;&lt;/span&gt; &lt;span class=&quot;n&quot;&gt;config&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;/&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;database&lt;/span&gt;&lt;span class=&quot;o&quot;&gt;.&lt;/span&gt;&lt;span class=&quot;n&quot;&gt;yml&lt;/span&gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+
+&lt;p&gt;Иногда, методы Awk или Sed являются наиболее уместным инструментом для вашей задачи. Но иногда требуется что-то большее или вам просто нет смысла смотреть как сделать какие-то общие операции, которые вы знаете как реализовать на Ruby, на каком-то другом языке. Всегда стоит использовать подходящий инструмент для задачи, и представленная гибкость Ruby может удивить как часто Ruby - это тот самый инструмент.&lt;/p&gt;
+
+&lt;h3 id=&quot;section-6&quot;&gt;Ссылки&lt;/h3&gt;
+
+&lt;ul&gt;
+  &lt;li&gt;&lt;a href=&quot;http://arjanvandergaag.nl/blog/using-ruby-command-line-options.html&quot;&gt;http://arjanvandergaag.nl/blog/using-ruby-command-line-options.html&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;https://speakerdeck.com/avdgaag/getting-started-with-ruby&quot;&gt;https://speakerdeck.com/avdgaag/getting-started-with-ruby&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://ruby-doc.org/stdlib-2.1.2/libdoc/optparse/rdoc/OptionParser.html&quot;&gt;http://ruby-doc.org/stdlib-2.1.2/libdoc/optparse/rdoc/OptionParser.html&lt;/a&gt;&lt;/li&gt;
+  &lt;li&gt;&lt;a href=&quot;http://ruby-doc.org/stdlib-2.0.0/libdoc/find/rdoc/Find.html&quot;&gt;http://ruby-doc.org/stdlib-2.0.0/libdoc/find/rdoc/Find.html&lt;/a&gt;&lt;/li&gt;
+&lt;/ul&gt;
+</description>
+        <pubDate>Sat, 12 Jul 2014 23:49:00 +0400</pubDate>
+        <link>http://nleo.github.io//blog/2014-07-12/know-ruby.html</link>
+        <guid isPermaLink="true">http://nleo.github.io//blog/2014-07-12/know-ruby.html</guid>
+        
+        
+        <category>ruby</category>
+        
+      </item>
+    
+  </channel>
+</rss>
